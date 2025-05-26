@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 """
 🤖 Telegram Signal Analyzer
-Powered by Machine Learning - 73% accuracy for 5x+ gains prediction
+Powered by Advanced Blockchain Analysis - Full Intelligence System
 
-Main analyzer combining all functionality for daily use.
-Designed for analyzing Solana token signals from Telegram groups.
+Main analyzer with deep blockchain connectivity and AI predictions.
+Uses RealBlockchainAnalyzer for comprehensive wallet/deployer intelligence.
 """
 
 import sys
 import os
-import pandas as pd
-import numpy as np
-import re
+import asyncio
 import json
 from datetime import datetime
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
+from real_blockchain_analyzer import RealBlockchainAnalyzer
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -219,8 +216,12 @@ class TelegramSignalAnalyzer:
         """Extract ML features from parsed data"""
         features = {}
         
-        # Market cap
-        features['market_cap_parsed'] = self._parse_market_cap(parsed_data.get('market_cap', ''))
+        # Market cap - with fallback handling
+        market_cap_raw = parsed_data.get('market_cap', '')
+        if not market_cap_raw:
+            # Try alternative keys
+            market_cap_raw = parsed_data.get('initial_mc', '')
+        features['market_cap_parsed'] = self._parse_market_cap(market_cap_raw)
         
         # Time features
         now = datetime.now()
