@@ -7,6 +7,7 @@ Išanalizuoja Telegram chat CSV failus ir ištraukia visą svarbią informaciją
 import pandas as pd
 import re
 import json
+import os
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 import warnings
@@ -78,8 +79,17 @@ class TelegramCoinAnalyzer:
         if pd.isna(text):
             return None
         
-        match = re.search(self.patterns['token_address'], text)
-        return match.group(1) if match else None
+        # Pirmas pattern - su backticks
+        match1 = re.search(self.patterns['token_address'], text)
+        if match1:
+            return match1.group(1)
+        
+        # Antras pattern - tiesiog token address eilutėje po "Token Address:"
+        match2 = re.search(r'Token Address:\s*([A-Za-z0-9]{40,50})', text)
+        if match2:
+            return match2.group(1)
+        
+        return None
     
     def extract_wallets_and_percentages(self, text):
         """Ištraukia wallet adresus ir jų procentus"""
@@ -87,11 +97,23 @@ class TelegramCoinAnalyzer:
             return []
         
         wallets = []
-        # Ieškome wallet adresų su procentais
-        wallet_pattern = r'\[([0-9]+\.?[0-9]*%)\](https://solscan\.io/address/([A-Za-z0-9]{40,50}))'
-        matches = re.findall(wallet_pattern, text)
         
-        for percentage, wallet in matches:
+        # Pirmas pattern - su nuorodomis [ ]
+        wallet_pattern1 = r'\[([0-9]+\.?[0-9]*%)\]\(https://solscan\.io/address/([A-Za-z0-9]{40,50})\)'
+        matches1 = re.findall(wallet_pattern1, text)
+        
+        for percentage, wallet in matches1:
+            wallets.append({
+                'wallet': wallet,
+                'percentage': percentage,
+                'percentage_float': float(percentage.replace('%', ''))
+            })
+        
+        # Antras pattern - tiesiog procentai su wallet adresais (jūsų signalo formatas)
+        wallet_pattern2 = r'([0-9]+\.?[0-9]*%)\s+\(https://solscan\.io/address/([A-Za-z0-9]{40,50})\)'
+        matches2 = re.findall(wallet_pattern2, text)
+        
+        for percentage, wallet in matches2:
             wallets.append({
                 'wallet': wallet,
                 'percentage': percentage,
@@ -1134,3 +1156,492 @@ class TelegramCoinAnalyzer:
         plt.close()
         
         print("✅ Comprehensive dashboard išsaugotas")
+
+    def parse_value(self, value_str):
+        """Konvertuoja K/M/B reikšmes į skaičius"""
+        if pd.isna(value_str) or value_str == '':
+            return 0
+        
+        value_str = str(value_str).replace(',', '').replace('$', '').strip()
+        
+        if value_str.endswith('K'):
+            return float(value_str[:-1]) * 1000
+        elif value_str.endswith('M'):
+            return float(value_str[:-1]) * 1000000
+        elif value_str.endswith('B'):
+            return float(value_str[:-1]) * 1000000000
+        else:
+            try:
+                return float(value_str)
+            except:
+                return 0
+
+    def analyze_single_signal(self, signal_text, coin_name=None):
+        """Analizuoja vieną signalą ir grąžina išsamią analizę"""
+        print(f"\n🔍 Analizuojame naują signalą...")
+        
+        # Automatiškai bandome ištraukti coin pavadinimą iš teksto
+        if not coin_name:
+            # Ieškome coin pavadinimo iš antraštės arba teksto
+            lines = signal_text.split('\n')
+            for line in lines:
+                if '|' in line and '$' in line:
+                    # Bandome ištraukti coin pavadinimą iš antraštės
+                    parts = line.split('|')
+                    if len(parts) >= 2:
+                        coin_candidate = parts[1].strip().replace('$', '').replace('(Pump.Fun💊)', '').strip()
+                        if coin_candidate and len(coin_candidate) <= 20:
+                            coin_name = coin_candidate
+                            break
+        
+        if not coin_name:
+            coin_name = "UNKNOWN_COIN"
+        
+        # Ištraukiame duomenis
+        token_address = self.extract_token_address(signal_text)
+        wallets = self.extract_wallets_and_percentages(signal_text)
+        financial_data = self.extract_financial_data(signal_text)
+        security_features = self.extract_security_features(signal_text)
+        links = self.extract_links(signal_text)
+        signal_keywords = self.count_signal_keywords(signal_text)
+        
+        # Sukuriame signalo analizės objektą
+        signal_analysis = {
+            'coin_name': coin_name,
+            'token_address': token_address,
+            'message_text': signal_text,
+            'analysis_timestamp': datetime.now().isoformat(),
+            
+            # Finansiniai duomenys
+            'market_cap': financial_data.get('market_cap', ''),
+            'market_cap_numeric': self.parse_value(financial_data.get('market_cap', '')),
+            'supply': financial_data.get('supply', ''),
+            'lp_sol': financial_data.get('lp_sol', 0),
+            'lp_tokens_percent': financial_data.get('lp_tokens_percent', 0),
+            'top_holders_percent': financial_data.get('top_holders_percent', 0),
+            
+            # Saugumo funkcijos
+            'freeze_disabled': security_features.get('freeze_disabled', False),
+            'mint_disabled': security_features.get('mint_disabled', False),
+            'lp_burned': security_features.get('lp_burned', False),
+            
+            # Wallet'ai
+            'wallet_count': len(wallets),
+            'wallets': wallets,
+            'max_wallet_percent': max([w['percentage_float'] for w in wallets]) if wallets else 0,
+            'total_wallet_percent': sum([w['percentage_float'] for w in wallets]) if wallets else 0,
+            
+            # Nuorodos ir signalai
+            'links': links,
+            'total_links': sum(links.values()) if links else 0,
+            'signal_keywords': signal_keywords,
+            'total_signals': sum(signal_keywords.values()) if signal_keywords else 0,
+            
+            # Risk scoring
+            'risk_score': self.calculate_risk_score(financial_data, security_features, wallets, links),
+            'success_probability': 0  # Bus apskaičiuota vėliau pagal istorinius duomenis
+        }
+        
+        return signal_analysis
+    
+    def calculate_risk_score(self, financial_data, security_features, wallets, links):
+        """Apskaičiuoja rizikos įvertinimą (0-100, kur 0 = mažiausia rizika)"""
+        risk_score = 50  # Bazinis įvertinimas
+        
+        # Saugumo funkcijos (mažina riziką)
+        if security_features.get('freeze_disabled', False):
+            risk_score -= 15
+        if security_features.get('mint_disabled', False):
+            risk_score -= 15
+        if security_features.get('lp_burned', False):
+            risk_score -= 20
+        
+        # Wallet koncentracija (didina riziką)
+        if wallets:
+            max_wallet = max([w['percentage_float'] for w in wallets])
+            if max_wallet > 5:
+                risk_score += 20
+            elif max_wallet > 3:
+                risk_score += 10
+        
+        # LP tokens procentas (didina riziką jei per mažas)
+        lp_percent = financial_data.get('lp_tokens_percent', 0)
+        if lp_percent < 10:
+            risk_score += 15
+        elif lp_percent < 20:
+            risk_score += 5
+        
+        # Nuorodų kiekis (mažina riziką)
+        total_links = sum(links.values()) if links else 0
+        if total_links >= 5:
+            risk_score -= 10
+        elif total_links >= 3:
+            risk_score -= 5
+        
+        # Ribojame 0-100 ribose
+        return max(0, min(100, risk_score))
+    
+    def compare_with_historical(self, signal_analysis, features_df):
+        """Palygina signalą su istoriniais duomenimis"""
+        if features_df is None or features_df.empty:
+            print("❌ Nėra istorinių duomenų palyginimui")
+            return signal_analysis
+        
+        print(f"\n📊 Lyginame su {len(features_df)} istoriniais coin'ais...")
+        
+        # Palyginimo metrikos
+        comparison = {
+            'market_cap_percentile': 0,
+            'lp_sol_percentile': 0,
+            'risk_score_percentile': 0,
+            'similar_coins': [],
+            'success_probability': 0
+        }
+        
+        # Market cap palyginimas
+        if signal_analysis['market_cap_numeric'] > 0:
+            historical_mc = features_df['market_cap'].apply(self.parse_value)
+            historical_mc = historical_mc[historical_mc > 0]
+            if len(historical_mc) > 0:
+                percentile = (historical_mc < signal_analysis['market_cap_numeric']).sum() / len(historical_mc) * 100
+                comparison['market_cap_percentile'] = percentile
+        
+        # LP SOL palyginimas
+        if signal_analysis['lp_sol'] > 0:
+            historical_lp = features_df['lp_sol'][features_df['lp_sol'] > 0]
+            if len(historical_lp) > 0:
+                percentile = (historical_lp < signal_analysis['lp_sol']).sum() / len(historical_lp) * 100
+                comparison['lp_sol_percentile'] = percentile
+        
+        # Risk score palyginimas
+        historical_risk = []
+        for _, row in features_df.iterrows():
+            hist_financial = {'market_cap': row.get('market_cap', ''), 'lp_tokens_percent': row.get('lp_tokens_percent', 0)}
+            hist_security = {'freeze_disabled': row.get('freeze_disabled', False), 
+                           'mint_disabled': row.get('mint_disabled', False),
+                           'lp_burned': row.get('lp_burned', False)}
+            hist_wallets = [{'percentage_float': row.get('max_wallet_percent', 0)}] if row.get('max_wallet_percent', 0) > 0 else []
+            hist_links = {'total': row.get('total_links', 0)}
+            
+            hist_risk = self.calculate_risk_score(hist_financial, hist_security, hist_wallets, hist_links)
+            historical_risk.append(hist_risk)
+        
+        if historical_risk:
+            percentile = (np.array(historical_risk) > signal_analysis['risk_score']).sum() / len(historical_risk) * 100
+            comparison['risk_score_percentile'] = percentile
+        
+        # Ieškome panašių coin'ų
+        similar_criteria = {
+            'freeze_disabled': signal_analysis['freeze_disabled'],
+            'mint_disabled': signal_analysis['mint_disabled'],
+            'lp_burned': signal_analysis['lp_burned']
+        }
+        
+        similar_coins = features_df[
+            (features_df['freeze_disabled'] == similar_criteria['freeze_disabled']) &
+            (features_df['mint_disabled'] == similar_criteria['mint_disabled']) &
+            (features_df['lp_burned'] == similar_criteria['lp_burned'])
+        ]
+        
+        if not similar_coins.empty:
+            # Apskaičiuojame sėkmės tikimybę pagal panašius coin'us
+            high_performers = similar_coins[similar_coins['max_gain'] >= 5.0]  # 5x ir daugiau
+            success_rate = len(high_performers) / len(similar_coins) * 100
+            comparison['success_probability'] = success_rate
+            
+            # Top panašūs coin'ai
+            top_similar = similar_coins.nlargest(5, 'max_gain')[['coin_name', 'max_gain', 'success_score']].to_dict('records')
+            comparison['similar_coins'] = top_similar
+        
+        # Pridedame palyginimo duomenis
+        signal_analysis['comparison'] = comparison
+        signal_analysis['success_probability'] = comparison['success_probability']
+        
+        return signal_analysis
+    
+    def generate_signal_report(self, signal_analysis):
+        """Generuoja išsamų signalo raportą"""
+        report = f"""
+# 🚀 Telegram Signalo Analizės Raportas
+
+## 📋 Pagrindinė Informacija
+- **Coin Pavadinimas:** {signal_analysis['coin_name']}
+- **Token Adresas:** `{signal_analysis['token_address'] or 'Nerastas'}`
+- **Analizės Laikas:** {signal_analysis['analysis_timestamp']}
+
+## 💰 Finansiniai Duomenys
+- **Market Cap:** {signal_analysis['market_cap']} (${signal_analysis['market_cap_numeric']:,.0f})
+- **Supply:** {signal_analysis['supply']}
+- **LP SOL:** {signal_analysis['lp_sol']} SOL
+- **LP Tokens:** {signal_analysis['lp_tokens_percent']}%
+- **Top Holders:** {signal_analysis['top_holders_percent']}%
+
+## 🔒 Saugumo Funkcijos
+- **Freeze Disabled:** {'✅ Taip' if signal_analysis['freeze_disabled'] else '❌ Ne'}
+- **Mint Disabled:** {'✅ Taip' if signal_analysis['mint_disabled'] else '❌ Ne'}
+- **LP Burned:** {'✅ Taip' if signal_analysis['lp_burned'] else '❌ Ne'}
+
+## 👥 Wallet Analizė
+- **Wallet'ų Kiekis:** {signal_analysis['wallet_count']}
+- **Maksimalus Wallet:** {signal_analysis['max_wallet_percent']:.2f}%
+- **Bendras Top Holders:** {signal_analysis['total_wallet_percent']:.2f}%
+
+## 🔗 Nuorodos ir Signalai
+- **Bendras Nuorodų Kiekis:** {signal_analysis['total_links']}
+- **Signalų Žodžių Kiekis:** {signal_analysis['total_signals']}
+
+## ⚠️ Rizikos Įvertinimas
+- **Risk Score:** {signal_analysis['risk_score']}/100 
+  {'🟢 Žema rizika' if signal_analysis['risk_score'] < 30 else '🟡 Vidutinė rizika' if signal_analysis['risk_score'] < 70 else '🔴 Aukšta rizika'}
+
+## 📊 Palyginimas su Istoriniais Duomenimis
+"""
+        
+        if 'comparison' in signal_analysis:
+            comp = signal_analysis['comparison']
+            report += f"""
+- **Market Cap Percentile:** {comp['market_cap_percentile']:.1f}% (aukštesnis nei {comp['market_cap_percentile']:.1f}% istorinių coin'ų)
+- **LP SOL Percentile:** {comp['lp_sol_percentile']:.1f}%
+- **Risk Score Percentile:** {comp['risk_score_percentile']:.1f}% (saugesnė nei {comp['risk_score_percentile']:.1f}% istorinių coin'ų)
+- **Sėkmės Tikimybė:** {comp['success_probability']:.1f}% (pagal panašius coin'us)
+
+### 🎯 Top Panašūs Coin'ai:
+"""
+            for coin in comp['similar_coins']:
+                report += f"- **{coin['coin_name']}:** {coin['max_gain']:.1f}x gain (Success Score: {coin['success_score']:.0f})\n"
+        
+        # Rekomendacijos
+        report += f"""
+
+## 💡 Rekomendacijos
+
+"""
+        
+        recommendations = []
+        
+        if signal_analysis['risk_score'] < 30:
+            recommendations.append("🟢 **ŽEMA RIZIKA** - Coin'as turi gerus saugumo rodiklius")
+        elif signal_analysis['risk_score'] < 70:
+            recommendations.append("🟡 **VIDUTINĖ RIZIKA** - Atidžiai stebėkite")
+        else:
+            recommendations.append("🔴 **AUKŠTA RIZIKA** - Būkite atsargūs")
+        
+        if not signal_analysis['freeze_disabled']:
+            recommendations.append("⚠️ Freeze funkcija nėra išjungta - papildoma rizika")
+        
+        if not signal_analysis['mint_disabled']:
+            recommendations.append("⚠️ Mint funkcija nėra išjungta - papildoma rizika")
+        
+        if not signal_analysis['lp_burned']:
+            recommendations.append("⚠️ LP nėra sudeginta - likvidumo rizika")
+        
+        if signal_analysis['max_wallet_percent'] > 5:
+            recommendations.append(f"⚠️ Didelis wallet'o procentas ({signal_analysis['max_wallet_percent']:.1f}%) - whale rizika")
+        
+        if signal_analysis['success_probability'] > 30:
+            recommendations.append(f"🚀 Gera sėkmės tikimybė ({signal_analysis['success_probability']:.1f}%) pagal panašius coin'us")
+        
+        for rec in recommendations:
+            report += f"- {rec}\n"
+        
+        return report
+
+
+def analyze_new_signal():
+    """Analizuoja naują Telegram signalą"""
+    
+    # Jūsų pateiktas signalas
+    signal_text = """🤖 0xBot AI Agent | Solana Network (https://t.me/ai_agent_solana_0xbot) 
+🏖 22M DOLLARS IN 3 FUCKING HOURS | $22M | (Pump.Fun💊)
+
+🛒 Token Address:
+BZqiNFc3f91NQGZFaYbeUR8WbbQ77KuFU3APrJXWpump
+
+📚 Supply: 1B Tokens
+📊 Initial MC: $67.60K
+💲 Call MC: $67.52K
+💎 Initial LP: 83.1 SOL | $14.32K
+💧 Call Liquidity: 83.1 SOL | $14.31K
+⚙️ LP Tokens: 21%
+
+💼 Top 10 holders: (https://solscan.io/token/BZqiNFc3f91NQGZFaYbeUR8WbbQ77KuFU3APrJXWpump#holders) 18.8%
+3.61% (https://solscan.io/address/6BeTJzGWDRBv7c3pp5cv35WC7bqEDWpx4Vum5GpvxQ5N) | 2.91% (https://solscan.io/address/65cubJNuxRqX4atoi25ZVy4qNikJqEmCMu3rbUvDEo8X) | 2.45% (https://solscan.io/address/fz5VDew2HgNUX6z5oitTedw9YdcBh9XxZAjzz3hSf8q) | 2.42% (https://solscan.io/address/CtQXrU8ZGpGDwYn5b4UtkqTYhdCfqaaMUSZZ53XMxnNt) | 2.14% (https://solscan.io/address/3gZiKZAjRzcHHQ6a1HUrHg4guhLZBPpLyWDxDzgxgF5n)
+1.22% (https://solscan.io/address/DqTM9cKXBJNNFjALpNiCPVgT48cDgRjSpeUZpEGqGMvS) | 1.12% (https://solscan.io/address/7BshTUYwQTGith4t8XmpDrpVGj2qmXWYxH394sPbtreT) | 1.01% (https://solscan.io/address/Ew6RcrLxJqGWJaEKuNWjeJCB7V7dp2QNo5NhQouds9Q4) | 0.98% (https://solscan.io/address/mj2o3pkuHQpitgzH5m5EcxzNUsu9ubCgcYWFwydRtaF) | 0.96% (https://solscan.io/address/HGXAqBmiejgrxDixhMP36agdmRACv6dwZEpKsZM6292K)
+
+🛠️ Deployer (https://solscan.io/account/TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM) 0.0 SOL | 0.0 Tokens
+
+❄️ FREEZE: ✅ Disabled
+💼 MINT: ✅ Disabled
+🔥 LP STATUS: ❌ Not Burned
+
+📬 SOCIALS: WEB (https://www.tiktok.com/@dame.emd/video/7395080945658776865) | X (https://x.com/i/communities/1926734220967248005)
+
+🔗 PHOTON (https://photon-sol.tinyastro.io/en/lp/BnLt5zg4SewdWYFfdKGiiq1F1u5Yt3ypVnt1oB6fZcA5) | BUNDLE (https://trench.bot/bundles/BZqiNFc3f91NQGZFaYbeUR8WbbQ77KuFU3APrJXWpump) | RUGCHECK (https://rugcheck.xyz/tokens/BZqiNFc3f91NQGZFaYbeUR8WbbQ77KuFU3APrJXWpump) | SCREEN (https://dexscreener.com/solana/BZqiNFc3f91NQGZFaYbeUR8WbbQ77KuFU3APrJXWpump) | DEXT (https://www.dextools.io/app/en/solana/pair-explorer/BnLt5zg4SewdWYFfdKGiiq1F1u5Yt3ypVnt1oB6fZcA5) | NEO BULLX (https://neo.bullx.io/terminal?chainId=1399811149&address=BZqiNFc3f91NQGZFaYbeUR8WbbQ77KuFU3APrJXWpump&r=24O6R3JBQZX)
+💡 Strategy: Viper Vision
+
+Our VIP members get 30s early calls and more premium signals than the public group. 👉 @pay0x_bot"""
+
+    # Sukuriame analizatorių
+    analyzer = TelegramCoinAnalyzer()
+    
+    # Užkrauname istorinius duomenis
+    try:
+        features_df = pd.read_csv('/workspaces/0xbot/coin_features_analysis.csv')
+        print(f"✅ Užkrauti istoriniai duomenys: {len(features_df)} coin'ų")
+    except Exception as e:
+        print(f"⚠️ Nepavyko užkrauti istorinių duomenų: {e}")
+        features_df = None
+    
+    # Analizuojame signalą
+    signal_analysis = analyzer.analyze_single_signal(signal_text, coin_name="22M")
+    
+    # Palyginame su istoriniais duomenimis
+    if features_df is not None:
+        signal_analysis = analyzer.compare_with_historical(signal_analysis, features_df)
+    
+    # Generuojame raportą
+    report = analyzer.generate_signal_report(signal_analysis)
+    
+    # Išsaugome raportą
+    with open('/workspaces/0xbot/new_signal_analysis.md', 'w', encoding='utf-8') as f:
+        f.write(report)
+    
+    # Išsaugome JSON formatą
+    with open('/workspaces/0xbot/new_signal_analysis.json', 'w', encoding='utf-8') as f:
+        json.dump(signal_analysis, f, indent=2, ensure_ascii=False, default=str)
+    
+    print(f"\n✅ Signalo analizė baigta!")
+    print(f"📄 Raportas išsaugotas: new_signal_analysis.md")
+    print(f"📊 JSON duomenys: new_signal_analysis.json")
+    
+    # Spausdiname pagrindinius rezultatus
+    print(f"\n🎯 PAGRINDINIAI REZULTATAI:")
+    print(f"Coin: {signal_analysis['coin_name']}")
+    print(f"Market Cap: ${signal_analysis['market_cap_numeric']:,.0f}")
+    print(f"Risk Score: {signal_analysis['risk_score']}/100")
+    print(f"Sėkmės Tikimybė: {signal_analysis['success_probability']:.1f}%")
+    print(f"Saugumo Funkcijos: Freeze={'✅' if signal_analysis['freeze_disabled'] else '❌'} | Mint={'✅' if signal_analysis['mint_disabled'] else '❌'} | LP Burned={'✅' if signal_analysis['lp_burned'] else '❌'}")
+    
+    return signal_analysis
+
+def main():
+    """Pagrindinė funkcija"""
+    analyzer = TelegramCoinAnalyzer()
+    
+    # Analizuojame CSV failą
+    csv_file = "/workspaces/0xbot/telegram_chat_0xBot_Solana_calls_-_Gold.csv"
+    
+    print("🤖 TELEGRAM COIN CALLS COMPREHENSIVE ANALYZER")
+    print("=" * 60)
+    print("🔍 Starting comprehensive analysis with advanced features...")
+    
+    coin_data, all_wallets = analyzer.analyze_csv(csv_file)
+    
+    if coin_data is None:
+        return
+    
+    # Sukuriame DataFrame'us
+    print("\n📊 Kuriame analizės lenteles...")
+    features_df = analyzer.create_features_dataframe(coin_data)
+    wallets_df = analyzer.create_wallets_dataframe(all_wallets)
+    
+    # Išsaugome pagrindinius rezultatus
+    features_df.to_csv('/workspaces/0xbot/coin_features_analysis.csv', index=False)
+    wallets_df.to_csv('/workspaces/0xbot/wallets_analysis.csv', index=False)
+    
+    print(f"✅ Išsaugota coin_features_analysis.csv ({len(features_df)} coin'ų)")
+    print(f"✅ Išsaugota wallets_analysis.csv ({len(wallets_df)} wallet'ų)")
+    
+    # Generuojame insights
+    print("\n🔮 Generuojame insights ir statistikas...")
+    insights = analyzer.generate_insights(features_df, wallets_df)
+    
+    # Laiko analizė
+    time_analysis = analyzer.analyze_time_patterns(features_df, coin_data)
+    
+    # Išsaugome insights
+    with open('/workspaces/0xbot/analysis_insights.json', 'w', encoding='utf-8') as f:
+        json.dump(insights, f, indent=2, ensure_ascii=False, default=str)
+    
+    with open('/workspaces/0xbot/time_analysis.json', 'w', encoding='utf-8') as f:
+        json.dump(time_analysis, f, indent=2, ensure_ascii=False, default=str)
+    
+    # Sukuriame vizualizacijas
+    analyzer.create_visualizations(features_df, wallets_df, coin_data)
+    
+    # Sukuriame comprehensive dashboard
+    analyzer.create_summary_dashboard(features_df, coin_data, insights)
+    
+    # Eksportuojame į Excel
+    analyzer.export_to_excel(features_df, wallets_df, insights)
+    
+    # Generuojame išsamų ataskaitą
+    analyzer.generate_comprehensive_report(features_df, wallets_df, coin_data, insights, time_analysis)
+    
+    print("\n🎯 ANALYSIS COMPLETE - KEY INSIGHTS:")
+    print("=" * 50)
+    
+    # Top performers
+    print("\n🚀 TOP PERFORMING COINS:")
+    for i, coin in enumerate(insights['top_performers'][:5], 1):
+        print(f"  {i}. {coin['coin_name']}: {coin['max_gain']}x (score: {coin['success_score']:.0f})")
+    
+    # Success patterns
+    if insights['success_patterns']:
+        patterns = insights['success_patterns']
+        print(f"\n📈 SUCCESS PATTERNS (coins 5x+):")
+        print(f"  • Avg signals per coin: {patterns['avg_signals']:.1f}")
+        print(f"  • Freeze disabled: {patterns['freeze_disabled_rate']:.1f}%")
+        print(f"  • Mint disabled: {patterns['mint_disabled_rate']:.1f}%")
+        print(f"  • LP burned: {patterns['lp_burned_rate']:.1f}%")
+        print(f"  • Avg links: {patterns['avg_links']:.1f}")
+        print(f"  • Avg max wallet %: {patterns['avg_wallet_concentration']:.1f}%")
+    
+    # Time insights
+    if time_analysis['time_based_insights']:
+        print(f"\n⏰ TIME-BASED INSIGHTS:")
+        for insight in time_analysis['time_based_insights']:
+            print(f"  • {insight}")
+    
+    # Whale wallets
+    print(f"\n🐋 TOP WHALE WALLETS:")
+    for i, whale in enumerate(insights['whale_wallets'][:3], 1):
+        print(f"  {i}. {whale['wallet'][:20]}... ({whale['appearance_count']} coins, {whale['total_percentage']:.1f}% total)")
+    
+    # Statistical summary
+    all_gains = [gain for data in coin_data.values() for gain in data['gains']]
+    print(f"\n📊 STATISTICAL SUMMARY:")
+    print(f"  • Total signals analyzed: {len(all_gains)}")
+    print(f"  • Average gain: {np.mean(all_gains):.2f}x")
+    print(f"  • Median gain: {np.median(all_gains):.2f}x")
+    print(f"  • Max gain: {max(all_gains):.2f}x")
+    print(f"  • Coins with 5x+ gains: {len(features_df[features_df['max_gain'] >= 5])}")
+    print(f"  • Success rate (5x+): {len(features_df[features_df['max_gain'] >= 5])/len(features_df)*100:.1f}%")
+    
+    # Recommendations
+    print(f"\n💡 STRATEGIC RECOMMENDATIONS:")
+    for rec in insights['recommendations']:
+        print(f"  • {rec}")
+    
+    print(f"\n✅ COMPREHENSIVE ANALYSIS COMPLETE!")
+    print("📁 Generated files:")
+    print("  • coin_features_analysis.csv - Detailed coin metrics")
+    print("  • wallets_analysis.csv - Wallet analysis")
+    print("  • telegram_analysis_complete.xlsx - Excel workbook")
+    print("  • comprehensive_report.md - Detailed report")
+    print("  • plots/ - All visualizations")
+    print("  • analysis_insights.json - Machine-readable insights")
+    print("  • time_analysis.json - Time-based patterns")
+    print("\n🎛️ Check the comprehensive dashboard: plots/comprehensive_dashboard.png")
+
+
+if __name__ == "__main__":
+    import sys
+    
+    # Tikrinome ar yra argumentų
+    if len(sys.argv) > 1 and sys.argv[1] == "new_signal":
+        # Analizuojame naują signalą
+        analyze_new_signal()
+    else:
+        # Vykdome pilną analizę
+        main()

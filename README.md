@@ -1,53 +1,38 @@
-# Telegram Coin Calls Parser 🚀
+# 🤖 Telegram Crypto Signal Analyzer
 
-An intelligent CSV parser for analyzing Telegram crypto trading signals, coin calls, and wallet activity. Extract actionable insights from chat exports to identify trending patterns and profitable trading opportunities.
+Išmanus Telegram kriptovaliutų signalų analizatorius, kuris analizuoja chat CSV eksportus ir ištraukia išsamius duomenis apie coin'ų poveikį, wallet'ų aktyvumą ir sėkmės šablonus.
 
-## 🎯 Purpose
+## 🎯 Paskirtis
 
-Automatically analyze Telegram bot/analyst chat CSV files and extract comprehensive information that helps understand which signals, wallets, percentages, and links most commonly accompany trending coins with high multiplier gains.
+Automatiškai analizuoja Telegram bot'ų/analitikų chat CSV failus ir ištraukia išsamią informaciją, kuri padeda suprasti, kurie signalai, wallet'ai, procentai ir nuorodos dažniausiai lydi trending coin'us su aukštais multiplier gain'ais.
 
-Create a comprehensive analysis table that enables easy filtering and trend modeling to identify characteristics of profitable coins.
+## ✨ Pagrindiniai Funkcionalumai
 
-## ✨ Features
+### 📊 Pilna Duomenų Analizė
+- **CSV Atpažinimas**: Automatiškai aptinka žinučių stulpelius
+- **Coin Atpažinimas**: Ištraukia coin pavadinimus ("COIN gains XXx")
+- **Wallet Analizė**: Identifikuoja visus wallet adresus
+- **Finansinių Duomenų Ekstraktavimas**: Market Cap, LP, Supply, etc.
+- **Saugumo Funkcijų Analizė**: Freeze/Mint/LP Burned statusai
+- **Signalų Detektavimas**: Visos signalų žodžių kategorijos
 
-### Automatic Data Extraction
-- **Smart CSV Detection**: Automatically detects message columns (text/message/body) - works with any Telegram chat export CSV
-- **Coin Recognition**: Extracts coin names using pattern matching ("COIN gains XXx")
-- **Wallet Analysis**: Identifies all ETH/SOL/other wallet addresses
-- **Supply Analysis**: Extracts all percentages (XX.X%) showing wallet supply/market cap holdings
-- **Signal Detection**: Captures ALL signal keywords (MC, CALL MC, STRATEGY, AUDIT, LP, SUPPLY, WALLET, LOCK, LIQUIDITY, etc.)
-- **Link Analysis**: Detects presence of web and Telegram links (web_ratio, tg_ratio)
+### 🔍 Naujas Signalų Analizatorius
+- **Vieningo Signalo Analizė**: Analizuoja naują signalą ir palygina su istoriniais
+- **Risk Score Skaičiavimas**: 0-100 rizikos įvertinimas
+- **Sėkmės Tikimybės Prognozė**: Pagal panašius istorinius coin'us
+- **Vizualizacijos**: Grafikų generavimas palyginimui
 
-### Comprehensive Analytics
-For each coin, generates detailed summaries including:
-- Number of messages
-- Number of X (gain) jumps
-- Signal count and types
-- Unique wallet count
-- Highest percentage holdings
-- Combined signal analysis
+### 📈 Išsami Statistika
+- **2,278+ Istorinių Coin'ų Duomenys**
+- **65,280+ Wallet'ų Analizė**
+- **Sėkmės Šablonų Identifikavimas**
+- **Laiko Tendencijų Analizė**
 
-### Output Files
-- **`features.csv`**: One row per coin with all extracted features
-- **`wallets.csv`**: Individual wallet addresses with supply percentages and associated coins
+## 🚀 Naudojimas
 
-### Robust Processing
-- Error-resistant operation even with empty messages or imperfect files
-- Safe handling of various CSV formats
-- No crashes on malformed data
-
-## 🔧 Installation
-
+### 1. Pilna Istorinių Duomenų Analizė
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/telegram-coin-parser
-cd telegram-coin-parser
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-## 📖 Usage
+python telegram_analyzer.py
 
 ### Basic Usage
 ```bash
@@ -66,116 +51,79 @@ print(f"Analyzed {len(features)} coins")
 print(f"Found {len(wallets)} unique wallets")
 ```
 
-## 📊 Use Cases
+### 2. Naujo Signalo Analizė
+```bash
+# Automatinė analizė (naudoja signalą iš kodo)
+python telegram_analyzer.py new_signal
 
-### 1. Signal Pattern Analysis
-- Identify which signal combinations most frequently precede major price movements
-- Analyze correlation between signal types and multiplier gains
+# Arba tiesiogiai
+python -c "from telegram_analyzer import analyze_new_signal; analyze_new_signal()"
+```
 
-### 2. Wallet Intelligence
-- Discover "success wallets" that repeatedly appear in profitable coins
-- Track wallet behavior patterns across different tokens
+### 3. Greita Signalo Analizė
+```bash
+# Interaktyvus režimas
+python quick_analyzer.py
 
-### 3. Predictive Modeling
-- Model which features/keywords are important before price jumps
-- Create scoring systems for new coins based on signal quantity and type
+# Command line režimas
+python quick_analyzer.py "jūsų signalo tekstas čia"
+```
 
-### 4. Performance Scoring
-- Develop automated scoring systems for new coins
-- Rate signals based on historical performance data
+### 4. Vizualizacijų Generavimas
+```bash
+python visualize_signal.py
+```
 
-### 5. Cross-Platform Analysis
-- Apply to other chat or coin signal groups
-- Adapt for different data sources by simply changing input files
+## 📁 Generuojami Failai
 
-## 📈 Output Format
+### Istorinė Analizė:
+- `coin_features_analysis.csv` - 2,278 coin'ų su detaliais metrikais
+- `wallets_analysis.csv` - 65,280 wallet'ų analizė
+- `telegram_analysis_complete.xlsx` - Excel darbo knyga
+- `comprehensive_report.md` - Išsamus raportas
+- `plots/` - Vizualizacijos
 
-### Features CSV
-| Column | Description |
-|--------|-------------|
-| coin_name | Extracted coin identifier |
-| message_count | Number of messages mentioning coin |
-| gain_multiplier | Highest X gain mentioned |
-| signal_keywords | Comma-separated signal words |
-| wallet_count | Number of unique wallets |
-| max_supply_percent | Highest wallet supply percentage |
-| web_links | Boolean for web presence |
-| tg_links | Boolean for Telegram presence |
+### Signalo Analizė:
+- `new_signal_analysis.md` - Signalo raportas
+- `new_signal_analysis.json` - JSON duomenys
+- `signal_comprehensive_analysis.md` - Išsami analizė
+- `plots/signal_analysis_comparison.png` - Palyginimo grafikai
+- `plots/signal_wallet_analysis.png` - Wallet analizė
 
-### Wallets CSV
-| Column | Description |
-|--------|-------------|
-| wallet_address | Blockchain wallet address |
-| supply_percent | Percentage of token supply |
-| coin_name | Associated coin |
-| message_context | Original message context |
+## 🎯 Pagrindiniai Rezultatai
 
-## 🔍 Signal Keywords
+Iš 2,278 analizuotų coin'ų:
+- **Top Performer:** CONCHO (331.56x gain)
+- **Vidutinis Gain:** 6.15x
+- **Success Rate (5x+):** 29.9%
+- **Sėkmingi Saugumo Šablonai:** Freeze/Mint disabled + LP burned
 
-The parser automatically detects and categorizes these signals:
-- **Market Cap**: MC, CALL MC, MARKET CAP
-- **Security**: AUDIT, VERIFIED, SAFE
-- **Liquidity**: LP, LIQUIDITY, LOCK, LOCKED
-- **Supply**: SUPPLY, WALLET, HOLDINGS
-- **Strategy**: STRATEGY, CALL, SIGNAL
-- **And many more...**
+## 🔍 Signalo Analizės Pavyzdys
 
-## 🛠️ Technical Specifications
+```
+🎯 PAGRINDINIAI REZULTATAI:
+Coin: 22M
+Market Cap: $67,600
+Risk Score: 20/100 🟢 ŽEMA RIZIKA
+Sėkmės Tikimybė: 23.1%
+Saugumo Funkcijos: Freeze=✅ | Mint=✅ | LP Burned=❌
+```
 
-### Requirements
-- Python 3.7+
-- pandas
-- numpy
-- re (regex)
-- csv
+## 💡 Rekomendacijos
 
-### Input Format
-- CSV files from Telegram chat exports
-- Flexible column detection (works with various export formats)
-- UTF-8 encoding support
+### 🟢 Geriausi Signalai:
+- Freeze ir Mint disabled
+- LP burned statusas
+- Mažas wallet'ų koncentracija (<5%)
+- Daugiau platformų nuorodų
 
-### Performance
-- Processes thousands of messages per second
-- Memory-efficient for large chat exports
-- Parallel processing capabilities
+### ⚠️ Rizikos Faktoriai:
+- Aukšta wallet'ų koncentracija (>5%)
+- Nesudeginta LP
+- Mažas signalų žodžių kiekis
 
-## 🚀 Getting Started
+## 🔧 Instaliacija
 
-1. **Export your Telegram chat** to CSV format
-2. **Run the parser** on your CSV file
-3. **Analyze the results** in the generated feature and wallet files
-4. **Build insights** using your preferred data analysis tools
-
-## 📋 Roadmap
-
-- [ ] Real-time Telegram bot integration
-- [ ] Advanced ML model integration
-- [ ] Web dashboard for visualization
-- [ ] API endpoints for external integration
-- [ ] Multi-blockchain support expansion
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## ⚠️ Disclaimer
-
-This tool is for educational and research purposes only. Always conduct your own research before making any trading decisions. Cryptocurrency trading involves substantial risk.
-
-## 📞 Support
-
-- 📧 Email: support@yourproject.com
-- 💬 Telegram: @yourproject
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/telegram-coin-parser/issues)
-
----
-
-**Made with ❤️ for the crypto analysis community**
+```bash
+pip install -r requirements.txt
+````

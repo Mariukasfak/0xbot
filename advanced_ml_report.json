@@ -1,0 +1,49 @@
+{
+  "analysis_date": "2025-05-26T04:58:55.947187",
+  "dataset_stats": {
+    "total_signals": 16985,
+    "signals_with_gains": "9547",
+    "avg_gain": 26.949211270556194,
+    "success_rate_5x": 0.2701206947306447,
+    "success_rate_10x": 0.14730644686488079
+  },
+  "ml_model": {
+    "model_type": "Random Forest",
+    "feature_count": 14,
+    "top_features": [
+      {
+        "feature": "initial_mc_value",
+        "importance": 0.23028889523923163
+      },
+      {
+        "feature": "top_holders_percent",
+        "importance": 0.22103000637899414
+      },
+      {
+        "feature": "initial_lp_sol",
+        "importance": 0.16440089309565326
+      },
+      {
+        "feature": "hour",
+        "importance": 0.13774856145479408
+      },
+      {
+        "feature": "day_of_week",
+        "importance": 0.07923102859077545
+      }
+    ]
+  },
+  "insights": {
+    "best_strategies": {
+      "Tiger Trace": 0.36363636363636365,
+      "Wolf Watch": 0.3333333333333333,
+      "Eagle Eye": 0.30042462845010615
+    },
+    "best_hours": {
+      "0": 0.3046757164404223,
+      "19": 0.2919042189281642,
+      "5": 0.2912801484230056
+    },
+    "security_impact": {}
+  }
+}
